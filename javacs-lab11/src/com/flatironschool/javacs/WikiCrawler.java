@@ -8,6 +8,7 @@ import java.util.Queue;
 
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.jsoup.nodes.Node;
 
 import redis.clients.jedis.Jedis;
 
@@ -54,8 +55,56 @@ public class WikiCrawler {
 	 * @throws IOException
 	 */
 	public String crawl(boolean testing) throws IOException {
-        // FILL THIS IN!
-		return null;
+        // TODO
+		
+		// 1. get url from queue
+		String url = queue.poll();
+		
+		if (testing) {
+
+			try {
+				// 2. read page using wikifetcher.readwikipedia
+				Elements paragraphs = wf.readWikipedia(url);
+				
+				// 3. index page
+				index.indexPage(url, paragraphs);
+				
+				// 4. add internal links to end of queue
+				queueInternalLinks(paragraphs);
+			}
+			catch (IOException e) {
+				throw e;
+			}
+			
+			// 5. return url
+			return url;
+			
+		}
+		else {
+			// 2. check if url is already indexed, if yes return null, else index it
+			if (index.isIndexed(url)){
+				return null;
+			}
+			else {
+				
+				try {
+					// 3. read page using wikifetcher.readwikipedia
+					Elements paragraphs = wf.readWikipedia(url);
+				
+					// 4. index page
+					index.indexPage(url, paragraphs);
+					
+					// 5. add links to queue
+					queueInternalLinks(paragraphs);
+					
+					// 6. return url
+					return url;
+				}
+				catch (IOException e) {
+					throw e;
+				}
+			}
+		}
 	}
 	
 	/**
@@ -65,7 +114,32 @@ public class WikiCrawler {
 	 */
 	// NOTE: absence of access level modifier means package-level
 	void queueInternalLinks(Elements paragraphs) {
-        // FILL THIS IN!
+        // TODO
+		
+		String urlStart = "https://en.wikipedia.org";
+		
+		// go thru each paragraph
+		for (Element para : paragraphs) { 
+			Iterable<Node> iter = new WikiNodeIterable(para);
+	
+			// go thru each node in each paragraph
+			for (Node node : iter) {
+				// check if node is link
+				if (node instanceof Element && ((Element) node).tagName().equals("a")) {
+					
+					String urlEnd = ((Element) node).attr("href");
+					
+					// wikipedia link
+					if (urlEnd.startsWith("/wiki/") ) {
+						// add url to queue
+						String url = urlStart + urlEnd;
+						queue.add(url);
+					}
+					
+				}
+			}
+		}
+		
 	}
 
 	public static void main(String[] args) throws IOException {
@@ -76,6 +150,10 @@ public class WikiCrawler {
 		String source = "https://en.wikipedia.org/wiki/Java_(programming_language)";
 		WikiCrawler wc = new WikiCrawler(source, index);
 		
+		index.deleteTermCounters();
+		index.deleteURLSets();
+		index.deleteAllKeys();
+		
 		// for testing purposes, load up the queue
 		Elements paragraphs = wf.fetchWikipedia(source);
 		wc.queueInternalLinks(paragraphs);
@@ -85,8 +163,9 @@ public class WikiCrawler {
 		do {
 			res = wc.crawl(false);
 
+			//TODO
             // REMOVE THIS BREAK STATEMENT WHEN crawl() IS WORKING
-            break;
+            //break;
 		} while (res == null);
 		
 		Map<String, Integer> map = index.getCounts("the");
